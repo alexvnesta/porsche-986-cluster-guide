@@ -189,19 +189,65 @@ Unlike old-style clusters, new-style code is NOT byte-swapped when read.
 
 ---
 
+## Market Configuration (UK vs US)
+
+Based on comparison of UK (KM/Celsius) vs US (Miles/Fahrenheit) dumps:
+
+### Potential Market/Unit Offsets (Old Style)
+
+The following bytes differ between UK and US market clusters:
+
+| Offset | UK (KM/C) | US (Miles/F) | Possible Function |
+|--------|-----------|--------------|-------------------|
+| 0x40 | `34` | `18` | Market config? |
+| 0x41 | `5D` | `60` | Market config? |
+| 0x44 | `99` | `66` | Market config? |
+| 0x46 | `16` | `26` | Market config? |
+| 0x4B | `BC` | `61` | Market config? |
+| 0xEB-0xED | `E4 52 94` | `E9 66 83` | **Speedometer calibration (KM vs Miles?)** |
+
+### Dial Calibration (0xE2-0xED)
+
+This 12-byte area appears to contain gauge calibration data:
+
+```
+Offset    UK (KM)         US (Miles)      Notes
+0xE2-E3   1B 12           18 10           Related to voltmeter?
+0xE4-EA   00 00 AF 00 EC 09 E4            Common (unchanged)
+0xEB-ED   E4 52 94        E9 66 83        SPEEDOMETER SCALING
+```
+
+**Hypothesis:** Bytes 0xEB-0xED contain the speedometer scaling factor:
+- `E4 52 94` = KM/H calibration
+- `E9 66 83` = MPH calibration
+
+### Row 0x40 Configuration Block
+
+This area (0x40-0x4F) differs significantly between UK and US clusters:
+
+```
+UK (KM/C):   34 5D 00 FB 99 F6 16 1F 0B 3C 78 BC FF FF FF FF
+US (Mi/F):   18 60 02 FC 66 F6 26 1F 0B 3C 78 61 FF FF FF FF
+                                          ^^
+                                          Oil Pressure confirmed at 0x49
+```
+
+---
+
 ## Research Needed
 
 The following items need further investigation:
 
 ### Units Configuration
-- [ ] **KM vs Miles** - Location of odometer/speedometer unit setting
-- [ ] **Celsius vs Fahrenheit** - Location of temperature unit setting
+- [ ] **KM vs Miles** - Likely in 0xEB-0xED (speedometer scaling) and 0x40-0x4B area
+- [ ] **Celsius vs Fahrenheit** - Location still unknown, may be in 0x40-0x4B area
+- [ ] **Odometer display units** - May be separate from speedometer
 
 ### Other Unknown Locations
 - [ ] **OBC Enable** for old-style (may be different from 0x2F)
-- [ ] **Top Operation Warning Light** enable/disable
+- [ ] **Soft Top Warning Light** enable/disable (for convertible models)
 - [ ] **Fuel Tank Size** calibration
-- [ ] **Complete dial calibration** mapping (0xE2-0xED area)
+- [ ] **Complete dial calibration** interpretation (0xE2-0xED)
 - [ ] **New-style feature flags** - OBC, voltmeter, oil pressure locations
 
 If you discover any of these, please contribute!
@@ -332,27 +378,54 @@ python3 tools/cluster_analyzer.py dump1.bin --compare dump2.bin
 ## Sample Dumps
 
 The `dumps/` folder contains:
-- 93C86 dump at 74,336 miles
-- 93C86 dump at 206,913 miles (same VIN, different mileage)
-- Reference images showing offset annotations for old-style clusters
+
+### Old Style (93C56B) - 256 bytes
+| File | Description | Market | VIN |
+|------|-------------|--------|-----|
+| `eeprom_dump_996_ref_986_rennlist_guide.bin` | 996→986 hybrid conversion | UK (KM/C) | WP0ZZZ98ZYU600985 |
+| `eeprom_dump_986_cluster_1999_avn_orig.bin` | Original 986 cluster | US (Mi/F?) | WP0CA2986XU624175 |
+| `eeprom_dump_working_with_eeprom_illustrated.bin` | From PDF guide (996) | US (Mi/F?) | WP0AA2995YS623225 |
+
+### New Style (93C86) - 2048 bytes
+| File | Description | Mileage |
+|------|-------------|---------|
+| `Porsche 911...74336 original dump.bin` | Original 996 | 74,336 mi |
+| `Porsche 911...206913 original dump.bin` | Modified mileage | 206,913 mi |
+
+### Reference Images
+- `93c56-old-style-hex-dump.jpg` - Raw hex view
+- `93c56-old-style-annotated-offsets.jpg` - Annotated offset map
 
 ---
 
 ## Quick Reference Card (Old Style 93C56B)
 
 ```
-OFFSET  VALUE       FUNCTION
-──────────────────────────────────────────
-0x00-0F (encrypted) Mileage
-0x18-1F ASCII       VIN part 1
-0x20-28 ASCII       VIN part 2
-0x35-36 09 86/09 96 Vehicle Type (986/996)
-0x3B    06/08       PST2 Mode (986/996)
-0x49    3C/50       Oil Pressure (ON/OFF)
-0x56    01/00       Voltmeter (ON/OFF)
-0xE2-ED varies      Dial Calibration
-???     ??/??       KM vs Miles (TBD)
-???     ??/??       Celsius vs Fahrenheit (TBD)
+OFFSET  VALUE           FUNCTION
+────────────────────────────────────────────────────
+0x00-0F (encrypted)     Mileage (16 bytes)
+0x18-1F ASCII           VIN part 1 (8 chars)
+0x20-28 ASCII           VIN part 2 (9 chars)
+0x35-36 09 86/09 96     Vehicle Type (986/996)
+0x3B    06/08           PST2 Mode (986/996)
+0x40-4B varies          Market config (UK vs US)
+0x49    3C/50           Oil Pressure (ON/OFF)
+0x56    01/00           Voltmeter (ON/OFF)
+0xE2-E3 1B12/1810       Calibration (voltmeter related?)
+0xEB-ED E45294/E96683   Speedometer scaling (KM/MPH?)
+```
+
+### 996→986 Conversion Checklist
+
+When converting a 996 cluster to work in a 986:
+
+```
+1. Copy mileage:        0x00-0x0F from 986 → 996 cluster
+2. Copy VIN:            0x18-0x28 from 986 → 996 cluster
+3. Set vehicle type:    0x35-0x36 = 09 86
+4. Set PST2 mode:       0x3B = 06
+5. Enable voltmeter:    0x56 = 01
+6. Enable oil pressure: 0x49 = 3C
 ```
 
 ---
