@@ -9,72 +9,102 @@
 
 **Recommended Programmer:** Willem GQ-4X (best compatibility)
 
-## Old Style Cluster (93C56B)
+---
+
+## Old Style Cluster (93C56B) - 256 bytes
 
 ### Memory Layout Overview
 
 ```
-0x00  ┌────────────────────────────────────────┐
-      │  ★ MILEAGE (encrypted)                 │  16 bytes, repeated pattern
-0x10  ├────────────────────────────────────────┤
-      │  ★ VIN                                 │  Starts here, continues...
-0x20  │  VIN continues...                      │
-      │  0x26-27: Vehicle Type (09 96/09 86)   │
-      │  0x2C: PST2 Mode Byte                  │
-      │  0x2F: OBC Enable                      │
-0x30  ├────────────────────────────────────────┤
-      │  0x30-31: Oil Pressure Gauge           │
-      │                                        │
-      │  ... (other configuration) ...         │
-      │                                        │
-0x100 └────────────────────────────────────────┘
+         00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+        ┌───────────────────────────────────────────────┐
+0x00    │ ★ MILEAGE (encrypted)                         │
+        ├───────────────────────────────────────────────┤
+0x10    │                         │ ★ VIN starts ────── │
+        ├─────────────────────────┼─────────────────────┤
+0x20    │ ── VIN continues ────── │                     │
+        ├───────────────────────────────────────────────┤
+0x30    │          │09 86│       │PST2│               │ │
+        │          │or   │       │mode│               │ │
+        │          │09 96│       │    │               │ │
+        ├───────────────────────────────────────────────┤
+0x40    │                   │OIL │                      │
+        │                   │PRES│                      │
+        ├───────────────────────────────────────────────┤
+0x50    │             │VOLT│                            │
+        │             │ MTR│                            │
+        ├───────────────────────────────────────────────┤
+        │              ... (other config) ...           │
+        ├───────────────────────────────────────────────┤
+0xE0    │    │ DIAL CALIBRATION DATA │                  │
+        │    │ (cols 02-0D)          │                  │
+        └───────────────────────────────────────────────┘
 ```
 
 ### Key Locations (93C56B) - DETAILED
 
-| Offset | Length | Value | Description |
-|--------|--------|-------|-------------|
-| 0x00-0x0F | 16 bytes | (encrypted) | **Mileage** - encrypted, repeated pattern |
-| 0x10-0x20 | ~17 bytes | ASCII | **VIN** - starts mid-line 0x10 |
-| 0x26-0x27 | 2 bytes | `09 96` or `09 86` | **Vehicle Type** - 996 or 986 |
-| 0x2C | 1 byte | `7A` or `78` | **PST2 Mode** - `7A`=986 mode, `78`=996 mode |
-| 0x2F | 1 byte | `00` or `1F` | **OBC Enable** - `00`=OFF, `1F`=ON |
-| 0x30-0x31 | 2 bytes | `0x??` or `50??` | **Oil Pressure Gauge** - `0x`=Enable, `50`=Disable |
+| Row | Column | Offset | Value | Description |
+|-----|--------|--------|-------|-------------|
+| 0x00 | 00-0F | 0x00-0x0F | (encrypted) | **Mileage** - 16 bytes, encrypted |
+| 0x10 | 08-0F | 0x18-0x1F | ASCII | **VIN** (first part) |
+| 0x20 | 00-08 | 0x20-0x28 | ASCII | **VIN** (second part) |
+| 0x30 | 05-06 | 0x35-0x36 | `09 86` / `09 96` | **Vehicle Type** |
+| 0x30 | 0B | 0x3B | `06` / `08` | **PST2 Mode** - `06`=986, `08`=996 |
+| 0x40 | 09 | 0x49 | `3C` / `50` | **Oil Pressure Gauge** - `3C`=ON, `50`=OFF |
+| 0x50 | 06 | 0x56 | `01` / `00` | **Voltmeter** - `01`=ON, `00`=OFF |
+| 0xE0 | 02-0D | 0xE2-0xED | varies | **Dial Calibration** data |
 
-### Vehicle Type (0x26-0x27)
+### Mileage (0x00-0x0F)
 
-This tells the cluster what car it's installed in:
-- `09 96` = 996 Carrera
-- `09 86` = 986 Boxster
+- 16 bytes of encrypted mileage data
+- Algorithm not publicly documented
+- To transfer: copy entire block from source to destination cluster
 
-### PST2 Mode Byte (0x2C)
+### VIN Location
+
+The 17-character VIN spans two rows:
+- **Row 0x10, columns 08-0F** (8 bytes) - First part of VIN
+- **Row 0x20, columns 00-08** (9 bytes) - Second part of VIN
+
+Total: 17 characters
+
+### Vehicle Type (0x35-0x36)
+
+Tells the cluster which car it's installed in:
+
+| Value | Model |
+|-------|-------|
+| `09 86` | 986 Boxster |
+| `09 96` | 996 Carrera |
+
+### PST2 Mode Byte (0x3B)
 
 This "mystery byte" affects how PST2/PIWIS diagnostic tools interact with the cluster:
-- `7A` = 986 Boxster mode
-- `78` = 996 Carrera mode
 
-If your 996 cluster doesn't behave correctly with PST2 after install in a 986, try changing this byte.
+| Value | Mode |
+|-------|------|
+| `06` | 986 Boxster mode |
+| `08` | 996 Carrera mode |
 
-### OBC Enable (0x2F)
+If your 996 cluster doesn't behave correctly with PST2 after install in a 986, change this byte.
 
-The On-Board Computer (trip computer) enable flag:
-- `00` = OBC disabled
-- `1F` = OBC enabled
+### Oil Pressure Gauge (0x49)
 
-This is independent of the DME - it's purely a cluster setting.
+| Value | Status |
+|-------|--------|
+| `3C` | ENABLED |
+| `50` | DISABLED |
 
-### Oil Pressure Gauge (0x30-0x31)
+### Voltmeter (0x56)
 
-Controls whether the oil pressure gauge is active:
-- First nibble `0x` = Enabled
-- First nibble `50` = Disabled
+| Value | Status |
+|-------|--------|
+| `01` | ENABLED |
+| `00` | DISABLED |
 
-### VIN Location Detail
+### Dial Calibration (0xE2-0xED)
 
-The VIN is stored spanning two lines:
-- Starts at the middle of line 0x10
-- Ends in the first half of line 0x20
-- Plus one character into the second half of line 0x20
+This area contains calibration data for the gauge needles. Research in progress.
 
 ### Byte Swapping Note (Important!)
 
@@ -85,29 +115,30 @@ The GQ-4X programmer reads/writes with bytes swapped:
 4. **Un-swap** (click A-B again) before writing back to chip
 5. The file you write should have the VIN looking garbled again
 
-## New Style Cluster (93C86)
+---
+
+## New Style Cluster (93C86) - 2048 bytes
 
 ### Memory Layout Overview
 
 ```
-0x000  ┌────────────────────────────────────────┐
-       │  ★ VIN (first line)                    │
-0x010  ├────────────────────────────────────────┤
-       │  Model code, configuration...          │
-       │                                        │
-       │         ... (configuration) ...        │
-       │                                        │
-0x300  ├────────────────────────────────────────┤
-       │  ★ MILEAGE (encrypted) - PRIMARY       │  32 bytes
-0x320  ├────────────────────────────────────────┤
-       │                                        │
-       │         ... (other data) ...           │
-       │                                        │
-0x500  ├────────────────────────────────────────┤
-       │  ★ MILEAGE (encrypted) - BACKUP        │  32 bytes
-0x520  ├────────────────────────────────────────┤
-       │                                        │
-0x800  └────────────────────────────────────────┘
+         00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+        ┌───────────────────────────────────────────────┐
+0x000   │ ★ VIN (first line)                            │
+        ├───────────────────────────────────────────────┤
+0x010   │ Model code, configuration...                  │
+        │                                               │
+        │           ... (configuration) ...             │
+        │                                               │
+        ├───────────────────────────────────────────────┤
+0x300   │ ★ MILEAGE (encrypted) - PRIMARY               │
+0x310   │ (32 bytes total)                              │
+        ├───────────────────────────────────────────────┤
+        │           ... (other data) ...                │
+        ├───────────────────────────────────────────────┤
+0x500   │ ★ MILEAGE (encrypted) - BACKUP                │
+0x510   │ (32 bytes total)                              │
+        └───────────────────────────────────────────────┘
 ```
 
 ### Key Locations (93C86)
@@ -135,16 +166,47 @@ The new style clusters run on lower power. The programmer provides enough power 
 
 Unlike old-style clusters, new-style code is NOT byte-swapped when read.
 
-## Feature Enable Flags Summary
+---
 
-| Feature | Old Style Offset | Old Style Values | New Style |
-|---------|------------------|------------------|-----------|
-| **OBC (Trip Computer)** | 0x2F | `00`=OFF, `1F`=ON | TBD |
-| **Oil Pressure Gauge** | 0x30-0x31 | `0x`=ON, `50`=OFF | TBD |
-| **Vehicle Type** | 0x26-0x27 | `09 96`/`09 86` | 0x010+ area |
-| **PST2 Mode** | 0x2C | `7A`=986, `78`=996 | TBD |
+## Feature Enable Summary
+
+### Old Style (93C56B)
+
+| Feature | Offset | Enable | Disable |
+|---------|--------|--------|---------|
+| **Voltmeter** | 0x56 | `01` | `00` |
+| **Oil Pressure Gauge** | 0x49 | `3C` | `50` |
+| **Vehicle Type** | 0x35-0x36 | `09 86`=986 | `09 96`=996 |
+| **PST2 Mode** | 0x3B | `06`=986 | `08`=996 |
+
+### New Style (93C86)
+
+| Feature | Offset | Enable | Disable |
+|---------|--------|--------|---------|
+| **OBC** | TBD | TBD | TBD |
 | **Voltmeter** | TBD | TBD | TBD |
-| **Top Operation Warning** | TBD | TBD | TBD |
+| **Oil Pressure Gauge** | TBD | TBD | TBD |
+
+---
+
+## Research Needed
+
+The following items need further investigation:
+
+### Units Configuration
+- [ ] **KM vs Miles** - Location of odometer/speedometer unit setting
+- [ ] **Celsius vs Fahrenheit** - Location of temperature unit setting
+
+### Other Unknown Locations
+- [ ] **OBC Enable** for old-style (may be different from 0x2F)
+- [ ] **Top Operation Warning Light** enable/disable
+- [ ] **Fuel Tank Size** calibration
+- [ ] **Complete dial calibration** mapping (0xE2-0xED area)
+- [ ] **New-style feature flags** - OBC, voltmeter, oil pressure locations
+
+If you discover any of these, please contribute!
+
+---
 
 ## Mileage Storage
 
@@ -155,22 +217,14 @@ Legitimate uses for mileage transfer:
 - Repair of damaged EEPROM
 - Classic vehicle restoration
 
-### Mileage Format
-
-- **Encrypted** in both cluster types
-- Cannot be read directly as a number
-- Copy entire mileage block when transferring between clusters
-
 ### Mileage Locations
 
 | Cluster Type | Primary Location | Backup Location |
 |--------------|------------------|-----------------|
-| Old Style (93C56B) | 0x00-0x0F | (same block, repeated) |
+| Old Style (93C56B) | 0x00-0x0F | (single copy) |
 | New Style (93C86) | 0x300-0x31F | 0x500-0x51F |
 
 ### Transfer Procedure
-
-To transfer mileage from one cluster to another:
 
 **Old Style:**
 1. Read source cluster, save to file
@@ -184,6 +238,8 @@ To transfer mileage from one cluster to another:
 3. Copy bytes 0x300-0x31F AND 0x500-0x51F from source to destination
 4. Write modified file to destination cluster
 
+---
+
 ## VIN Transfer
 
 ### Why Transfer VIN?
@@ -194,29 +250,13 @@ To transfer mileage from one cluster to another:
 ### VIN Transfer Procedure
 
 **Old Style:**
-1. Copy second half of line 0x10 from source
-2. Copy first half of line 0x20 from source
-3. Copy first character of second half of line 0x20
+- Copy bytes 0x18-0x1F (row 0x10, cols 08-0F)
+- Copy bytes 0x20-0x28 (row 0x20, cols 00-08)
 
 **New Style:**
-1. Copy bytes 0x000-0x00F (entire first line)
+- Copy bytes 0x000-0x010 (entire first line)
 
-## Model Code
-
-The model identifier tells the cluster which vehicle it's in:
-
-| Code | Model |
-|------|-------|
-| `09 96` | 996 Carrera |
-| `09 86` | 986 Boxster |
-
-**Old Style:** Located at 0x26-0x27
-**New Style:** Located in 0x010-0x02F area
-
-This affects:
-- PIWIS/PST2 menu access
-- Some gauge behaviors
-- Possibly fuel tank calibration
+---
 
 ## Disassembly for EEPROM Access
 
@@ -237,6 +277,8 @@ This affects:
 
 Both chips are 8-pin SOIC packages. Pin 1 is marked with a dot or notch.
 
+---
+
 ## SOIC Clip Connection
 
 ```
@@ -251,6 +293,8 @@ SOIC clip orientation:
 - Pin 1 on chip = Pin 1 on clip
 - Clip's Pin 1 should align with programmer's Pin 1
 ```
+
+---
 
 ## Software Tools
 
@@ -283,12 +327,35 @@ python3 tools/cluster_analyzer.py dump.bin
 python3 tools/cluster_analyzer.py dump1.bin --compare dump2.bin
 ```
 
+---
+
 ## Sample Dumps
 
 The `dumps/` folder contains:
 - 93C86 dump at 74,336 miles
 - 93C86 dump at 206,913 miles (same VIN, different mileage)
-- Reference images showing offset annotations
+- Reference images showing offset annotations for old-style clusters
+
+---
+
+## Quick Reference Card (Old Style 93C56B)
+
+```
+OFFSET  VALUE       FUNCTION
+──────────────────────────────────────────
+0x00-0F (encrypted) Mileage
+0x18-1F ASCII       VIN part 1
+0x20-28 ASCII       VIN part 2
+0x35-36 09 86/09 96 Vehicle Type (986/996)
+0x3B    06/08       PST2 Mode (986/996)
+0x49    3C/50       Oil Pressure (ON/OFF)
+0x56    01/00       Voltmeter (ON/OFF)
+0xE2-ED varies      Dial Calibration
+???     ??/??       KM vs Miles (TBD)
+???     ??/??       Celsius vs Fahrenheit (TBD)
+```
+
+---
 
 ## Acknowledgments
 
