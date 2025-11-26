@@ -269,6 +269,12 @@ The following items need further investigation:
 - [ ] **12hr vs 24hr time** - Location unknown
 - [ ] **Odometer display units** - May be separate from speedometer
 
+### Transmission Configuration
+- [ ] **Auto vs Manual** - Location unknown, possibly in 0x37-0x3A or 0x40-0x41 area
+  - Known manual cluster (avn_orig): 0x37-0x3A = `64 19 80 26`, 0x40-0x41 = `18 60`
+  - Rennlist dump differs: 0x37-0x3A = `64 11 07 02`, 0x40-0x41 = `34 5D`
+  - Need more samples to confirm which byte controls transmission type
+
 ### Other Unknown Locations
 - [x] **OBC Enable** for old-style - **FOUND: 0x47** (`00`=OFF, `1F`=ON)
 - [ ] **Soft Top Warning Light** enable/disable (for convertible models)
