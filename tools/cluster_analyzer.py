@@ -20,6 +20,7 @@ Old Style (93C56B) Key Offsets:
     0x20-0x28  VIN part 2
     0x35-0x36  Vehicle Type (09 86=986, 09 96=996)
     0x3B       PST2 Mode (06=986, 08=996)
+    0x47       OBC Trip Computer (00=OFF, 1F=ON)
     0x49       Oil Pressure Gauge (3C=ON, 50=OFF)
     0x56       Voltmeter (01=ON, 00=OFF)
     0xE2-0xED  Dial Calibration
@@ -152,6 +153,29 @@ def extract_pst2_mode_old_style(data: bytes) -> dict:
             result['mode'] = "996 Carrera mode"
         else:
             result['mode'] = f"Unknown (0x{mode_byte:02X})"
+
+    return result
+
+
+def extract_obc_old_style(data: bytes) -> dict:
+    """Extract OBC (On-Board Computer) status from old-style cluster.
+
+    Located at 0x47 (row 0x40, column 07).
+    00 = DISABLED
+    1F = ENABLED
+    """
+    result = {}
+    if len(data) > 0x47:
+        obc_byte = data[0x47]
+        result['offset'] = '0x47'
+        result['value'] = f"0x{obc_byte:02X}"
+
+        if obc_byte == 0x00:
+            result['status'] = "DISABLED"
+        elif obc_byte == 0x1F:
+            result['status'] = "ENABLED"
+        else:
+            result['status'] = f"UNKNOWN (0x{obc_byte:02X})"
 
     return result
 
@@ -336,6 +360,7 @@ def analyze_dump(filepath: str) -> dict:
         result['vin'] = extract_vin_old_style(data)
         result['vehicle_type'] = extract_vehicle_type_old_style(data)
         result['pst2_mode'] = extract_pst2_mode_old_style(data)
+        result['obc'] = extract_obc_old_style(data)
         result['oil_pressure'] = extract_oil_pressure_old_style(data)
         result['voltmeter'] = extract_voltmeter_old_style(data)
         result['dial_calibration'] = extract_dial_calibration_old_style(data)
@@ -380,6 +405,11 @@ def print_analysis(analysis: dict):
         pst2 = analysis['pst2_mode']
         print(f"PST2 MODE: {pst2.get('mode', 'N/A')}")
         print(f"          [{pst2.get('offset', '')} = {pst2.get('value', '')}]")
+
+    if 'obc' in analysis:
+        obc = analysis['obc']
+        print(f"OBC (TRIP COMPUTER): {obc.get('status', 'N/A')}")
+        print(f"                    [{obc.get('offset', '')} = {obc.get('value', '')}]")
 
     if 'oil_pressure' in analysis:
         oil = analysis['oil_pressure']
@@ -452,6 +482,7 @@ Old Style (93C56B) Offsets:
   0x20-0x28  VIN part 2
   0x35-0x36  Vehicle Type (09 86=986, 09 96=996)
   0x3B       PST2 Mode (06=986, 08=996)
+  0x47       OBC Trip Computer (00=OFF, 1F=ON)
   0x49       Oil Pressure (3C=ON, 50=OFF)
   0x56       Voltmeter (01=ON, 00=OFF)
   0xE2-0xED  Dial Calibration

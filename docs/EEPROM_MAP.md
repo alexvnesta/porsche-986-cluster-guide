@@ -50,6 +50,7 @@
 | 0x20 | 00-08 | 0x20-0x28 | ASCII | **VIN** (second part) |
 | 0x30 | 05-06 | 0x35-0x36 | `09 86` / `09 96` | **Vehicle Type** |
 | 0x30 | 0B | 0x3B | `06` / `08` | **PST2 Mode** - `06`=986, `08`=996 |
+| 0x40 | 07 | 0x47 | `00` / `1F` | **OBC (On-Board Computer)** - `00`=OFF, `1F`=ON |
 | 0x40 | 09 | 0x49 | `3C` / `50` | **Oil Pressure Gauge** - `3C`=ON, `50`=OFF |
 | 0x50 | 06 | 0x56 | `01` / `00` | **Voltmeter** - `01`=ON, `00`=OFF |
 | 0xE0 | 02-0D | 0xE2-0xED | varies | **Dial Calibration** data |
@@ -87,6 +88,17 @@ This "mystery byte" affects how PST2/PIWIS diagnostic tools interact with the cl
 | `08` | 996 Carrera mode |
 
 If your 996 cluster doesn't behave correctly with PST2 after install in a 986, change this byte.
+
+### OBC - On-Board Computer (0x47)
+
+The trip computer / on-board computer enable flag:
+
+| Value | Status |
+|-------|--------|
+| `00` | DISABLED |
+| `1F` | ENABLED |
+
+This controls whether the OBC functions (average fuel consumption, range, etc.) are available.
 
 ### Oil Pressure Gauge (0x49)
 
@@ -174,8 +186,9 @@ Unlike old-style clusters, new-style code is NOT byte-swapped when read.
 
 | Feature | Offset | Enable | Disable |
 |---------|--------|--------|---------|
-| **Voltmeter** | 0x56 | `01` | `00` |
+| **OBC (Trip Computer)** | 0x47 | `1F` | `00` |
 | **Oil Pressure Gauge** | 0x49 | `3C` | `50` |
+| **Voltmeter** | 0x56 | `01` | `00` |
 | **Vehicle Type** | 0x35-0x36 | `09 86`=986 | `09 96`=996 |
 | **PST2 Mode** | 0x3B | `06`=986 | `08`=996 |
 
@@ -244,7 +257,7 @@ The following items need further investigation:
 - [ ] **Odometer display units** - May be separate from speedometer
 
 ### Other Unknown Locations
-- [ ] **OBC Enable** for old-style (may be different from 0x2F)
+- [x] **OBC Enable** for old-style - **FOUND: 0x47** (`00`=OFF, `1F`=ON)
 - [ ] **Soft Top Warning Light** enable/disable (for convertible models)
 - [ ] **Fuel Tank Size** calibration
 - [ ] **Complete dial calibration** interpretation (0xE2-0xED)
@@ -409,6 +422,7 @@ OFFSET  VALUE           FUNCTION
 0x35-36 09 86/09 96     Vehicle Type (986/996)
 0x3B    06/08           PST2 Mode (986/996)
 0x40-4B varies          Market config (UK vs US)
+0x47    00/1F           OBC Trip Computer (OFF/ON)
 0x49    3C/50           Oil Pressure (ON/OFF)
 0x56    01/00           Voltmeter (ON/OFF)
 0xE2-E3 1B12/1810       Calibration (voltmeter related?)
@@ -424,8 +438,9 @@ When converting a 996 cluster to work in a 986:
 2. Copy VIN:            0x18-0x28 from 986 → 996 cluster
 3. Set vehicle type:    0x35-0x36 = 09 86
 4. Set PST2 mode:       0x3B = 06
-5. Enable voltmeter:    0x56 = 01
+5. Enable OBC:          0x47 = 1F (if desired)
 6. Enable oil pressure: 0x49 = 3C
+7. Enable voltmeter:    0x56 = 01
 ```
 
 ---
