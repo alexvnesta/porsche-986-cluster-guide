@@ -116,7 +116,13 @@ This controls whether the OBC functions (average fuel consumption, range, etc.) 
 
 ### Dial Calibration (0xE2-0xED)
 
-This area contains calibration data for the gauge needles. Research in progress.
+This 12-byte area contains calibration data for the four gauge needles:
+- **Speedometer** (MPH or KM/H scaling)
+- **Tachometer** (RPM)
+- **Coolant temperature**
+- **Fuel level**
+
+The exact byte mapping for each gauge is still being researched. When doing a 996→986 conversion, you may need to copy fuel gauge calibration from your original 986 cluster for accurate readings.
 
 ### Byte Swapping Note (Important!)
 
@@ -221,10 +227,14 @@ The following bytes differ between UK and US market clusters:
 
 ### Dial Calibration (0xE2-0xED)
 
-This 12-byte area appears to contain gauge calibration data:
+This 12-byte area contains calibration data for four gauges:
+- **Speedometer** (MPH or KM/H)
+- **Tachometer** (RPM)
+- **Coolant temperature**
+- **Fuel level**
 
 ```
-Offset    UK (KM)         US (Miles)      Notes
+Offset    UK (KM)         US (MPH/C)      Notes
 0xE2-E3   1B 12           18 10           Related to voltmeter?
 0xE4-EA   00 00 AF 00 EC 09 E4            Common (unchanged)
 0xEB-ED   E4 52 94        E9 66 83        SPEEDOMETER SCALING
@@ -233,6 +243,8 @@ Offset    UK (KM)         US (Miles)      Notes
 **Hypothesis:** Bytes 0xEB-0xED contain the speedometer scaling factor:
 - `E4 52 94` = KM/H calibration
 - `E9 66 83` = MPH calibration
+
+**Note:** When converting a 996 cluster to 986, you may need to copy fuel gauge calibration bytes from your original 986 cluster for accurate fuel level readings.
 
 ### Row 0x40 Configuration Block
 
@@ -253,7 +265,8 @@ The following items need further investigation:
 
 ### Units Configuration
 - [ ] **KM vs Miles** - Likely in 0xEB-0xED (speedometer scaling) and 0x40-0x4B area
-- [ ] **Celsius vs Fahrenheit** - Location still unknown, may be in 0x40-0x4B area
+- [ ] **Celsius vs Fahrenheit** - Location still unknown (note: MPH clusters can still use Celsius)
+- [ ] **12hr vs 24hr time** - Location unknown
 - [ ] **Odometer display units** - May be separate from speedometer
 
 ### Other Unknown Locations
@@ -393,11 +406,41 @@ python3 tools/cluster_analyzer.py dump1.bin --compare dump2.bin
 The `dumps/` folder contains:
 
 ### Old Style (93C56B) - 256 bytes
-| File | Description | Market | VIN |
-|------|-------------|--------|-----|
-| `eeprom_dump_996_ref_986_rennlist_guide.bin` | 996→986 hybrid conversion | UK (KM/C) | WP0ZZZ98ZYU600985 |
-| `eeprom_dump_986_cluster_1999_avn_orig.bin` | Original 986 cluster | US (Mi/F?) | WP0CA2986XU624175 |
-| `eeprom_dump_working_with_eeprom_illustrated.bin` | From PDF guide (996) | US (Mi/F?) | WP0AA2995YS623225 |
+
+#### Dump Comparison
+
+| Feature | avn_orig (your 986) | rennlist (986 conversion) | illustrated (PDF guide) |
+|---------|---------------------|---------------------------|-------------------------|
+| **VIN** | WP0CA2986XU624175 | WP0ZZZ98ZYU600985 | WP0AA2995YS623225 |
+| **Vehicle Type** | 996 (0996) | **986** (0986) | 996 (0996) |
+| **PST2 Mode** | 996 (0x08) | **986** (0x06) | 996 (0x08) |
+| **OBC** | ENABLED | ENABLED | ENABLED |
+| **Oil Pressure** | ENABLED | ENABLED | ENABLED |
+| **Voltmeter** | **DISABLED** | ENABLED | ENABLED |
+| **0xE2-E3** | 18 10 | 1B 12 | 1B 12 |
+| **0xEB-ED** | E9 66 83 (MPH) | E4 52 94 (KM) | E9 66 83 (MPH) |
+| **Speed** | MPH | KM | MPH |
+| **Temp** | Celsius | Celsius | ? |
+| **Time** | 12hr | ? | ? |
+
+#### Key Observations
+
+1. **986 conversion (rennlist)** - The only one configured as a 986 Boxster:
+   - Vehicle type = 0986, PST2 mode = 0x06
+   - Speedometer calibration = KM (E4 52 94)
+
+2. **Your original (avn_orig)** - Only dump with voltmeter disabled:
+   - Voltmeter = 0x00, 0xE2-E3 = 18 10
+
+3. **0xE2-E3 correlation** - These bytes (`18 10` vs `1B 12`) may correlate with voltmeter state
+
+#### Dump Files
+
+| File | Description |
+|------|-------------|
+| `eeprom_dump_996_ref_986_rennlist_guide.bin` | 996→986 conversion (UK, KM/Celsius) |
+| `eeprom_dump_986_cluster_1999_avn_orig.bin` | Original 986 (MPH/Celsius, 12hr) |
+| `eeprom_dump_working_with_eeprom_illustrated.bin` | From Rennlist PDF guide (996) |
 
 ### New Style (93C86) - 2048 bytes
 | File | Description | Mileage |
