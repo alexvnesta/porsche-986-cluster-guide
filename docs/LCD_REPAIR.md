@@ -5,14 +5,14 @@
 The 986/996 instrument cluster LCD displays are prone to failure, typically showing:
 - Missing pixel rows/columns
 - Faded or dim segments
-- Complete display failure
-- Intermittent display
+- Dark bleeding ("black spot" nematic crystal leakage)
+- Complete display failure or intermittent segments
 
 ## Root Cause
 
-The LCD is connected to the circuit board via a flexible ribbon cable with a heat-bonded (zebra strip) connection. Over time:
-- Thermal cycling weakens the bond
-- Solder joints crack
+The three segmented LCD panels are connected to the circuit board via flexible heat-bonded ribbon cables (elastomeric / zebra-strip connectors). Over time:
+- Thermal cycling weakens the conductive adhesive bond
+- Internal liquid crystal seals degrade under UV/heat exposure
 - Connection becomes intermittent
 
 ## Repair Options
@@ -25,107 +25,67 @@ The LCD is connected to the circuit board via a flexible ribbon cable with a hea
 
 1. Remove cluster from vehicle
 2. Disassemble cluster housing
-3. Carefully lift LCD from circuit board
+3. Carefully lift LCD frame from circuit board
 4. Clean contacts with isopropyl alcohol
-5. Re-heat the ribbon cable connection using:
-   - Soldering iron with flat tip
-   - Heat gun (carefully!)
+5. Re-heat the ribbon cable connection using a T-bar soldering iron tip with Teflon strip
 6. Apply even pressure while cooling
-7. Test before reassembly
+7. Test on bench (`Plug A Pins 1/17` GND, `Pins 2/18/3` +12V on MY01+; or KWP2000 `30 18 00` segment test) before reassembly
 
-### Option 2: Replace Ribbon Cable
+### Option 2: Replace LCD Glass & Ribbon Cable (`Minitools SEPDISP87`)
 
 **Difficulty:** Medium-High
 **Success Rate:** 90%+
-**Cost:** $20-50 for ribbon cable
+**Cost:** $50-120 per LCD / ribbon kit
 
-1. Source correct replacement ribbon cable
-2. Remove old ribbon cable (careful - it's fragile)
-3. Clean all contacts thoroughly
-4. Position new ribbon cable precisely
-5. Heat-bond using soldering iron
-6. Test all segments before reassembly
+1. Source the correct replacement LCD panel (e.g., **Minitools `SEPDISP87`** for MY2001–2004 986 / MY2001–2005 996 3-window clusters)
+2. Remove old ribbon cable / glass carefully
+3. Clean all PCB gold-plated contacts thoroughly with isopropyl alcohol
+4. Position new ribbon cable / LCD glass precisely
+5. Heat-bond or seat connector frame
+6. Test all segments using the cluster self-test mode or KWP2000 actuator test `30 18 00`
 
 ### Option 3: Professional Repair
 
 **Difficulty:** None (send it out)
 **Success Rate:** 95%+
-**Cost:** $100-300
-
-Companies that repair these clusters:
-- [Various eBay sellers]
-- Specialized Porsche electronics shops
-- Local instrument cluster repair shops
+**Cost:** $150-350
 
 ## Required Tools
 
 - Torx drivers (T10, T20)
 - Small Phillips screwdriver
-- Soldering iron with fine tip
+- Soldering iron with T-bar heat-seal tip
 - Isopropyl alcohol (90%+)
 - Lint-free cloth
 - Magnifying glass or loupe
-- Heat gun (optional)
 
 ## Disassembly Procedure
 
 ### Removing from Vehicle
 
-1. Disconnect battery negative terminal
-2. Remove steering column covers
-3. Remove cluster trim bezel (clips)
-4. Remove 4x Torx screws holding cluster
-5. Tilt cluster forward
-6. Disconnect electrical connector
-7. Remove cluster
+1. Disconnect battery negative terminal (never turn ignition ON while the cluster is unplugged, or the Airbag ECU `0x15` will latch a fault code!)
+2. Pry up the hazard switch trim and microphone/Left bezel cover to access the 2x Torx T20 screws
+3. Tilt cluster forward and release the 3 sliding Cam-Lock connector latches (Green Plug A, Blue Plug B, Grey Plug C on MY01+; Blue Plug I, White Plug II, Black Plug III on MY97–00)
+4. Remove cluster
 
 ### Opening the Cluster
 
-1. Note orientation of all components
-2. Take photos before disassembly!
-3. Remove rear cover screws
-4. Carefully separate housing halves
-5. Note position of light diffusers and guides
-6. Access circuit board and LCD
+1. Note orientation of all components and take photos before disassembly
+2. Unclip the rear white housing cover and remove the Torx screws
+3. Separate housing halves and access the PCB and 3 LCD cages
 
-## LCD Pinout
+## Replacement LCDs & Contrast Voltage Bias (`0x2C6`)
 
-The LCD typically has multiple segments:
-- Odometer digits
-- Trip computer display
-- Warning indicators
-- Clock/temperature display
-
-## Testing
-
-Before reassembly, power up the cluster on the bench:
-- Connect 12V to appropriate pins
-- Verify all segments illuminate
-- Check for any remaining dead pixels
-
-## Prevention
-
-To slow future degradation:
-- Avoid extreme temperature cycling
-- Park in garage when possible
-- Consider conformal coating on repaired joints
-
-## Replacement LCDs
-
-If the LCD itself is damaged (not just the connection):
-- OEM replacement: Very expensive
-- Used cluster: Source from same model year
-- Aftermarket: Limited availability
+If the LCD glass itself is cracked, bleeding, or delaminated:
+- **Aftermarket Replacement LCD Glass:** **Minitools `SEPDISP87`** (direct replacement for late 3-window segmented clusters).
+- **Important Note on 3-Window Segmented LCDs:** Every 986 Boxster cluster (both Early MY97–00 and Late MY01–04 `K21/K24/K26`) uses **three segmented nematic LCD windows**. None of the 986 clusters use a central dot-matrix display (which was only fitted to MY2002+ 996 Carrera facelift clusters `DSN K27+`).
+- **LCD Operating Voltage / Contrast Bias (`EEPROM Offset 0x2C6`):**
+  - On late `93C86` clusters, EEPROM byte **`0x2C6`** sets the microcontroller's LCD operating voltage (`VLCD`, nominal **`12.7 V – 12.9 V`**).
+  - **Factory 986 (`K21` / `K24`) value:** `0x21` (`33`).
+  - **Factory 996 (`K23`) value:** `0x20` (`32`).
+  - Each `±1` hex step shifts `VLCD` by approximately **`±0.1 V`** (`+1` = darker segments; `-1` = lighter segments / less ghosting in hot cabin temperatures).
 
 ## Related Issues
 
-### Dim Backlight
-
-If the LCD works but is dim:
-- Check backlight bulbs/LEDs
-- See [BACKLIGHT.md](BACKLIGHT.md)
-
-### Gauge Issues
-
-LCD problems are separate from gauge issues:
-- See [DIAGNOSTICS.md](DIAGNOSTICS.md)
+- **Dim Backlight:** See [BACKLIGHT.md](BACKLIGHT.md)
+- **Gauge / Coding Issues:** See [DIAGNOSTICS.md](DIAGNOSTICS.md) and [EEPROM_MAP.md](EEPROM_MAP.md)
