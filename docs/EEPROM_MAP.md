@@ -398,13 +398,21 @@ In addition to standard KWP2000 fault codes (`0x600–0x643`), the 93C86 cluster
 | **Old Style (`93C56B`)** | `0x000–0x00F` (16 bytes) | *(Single copy only)* | `21 22` (4 bytes) |
 | **New Style (`93C86`)** | `0x300–0x31F` (32 bytes) | `0x500–0x51F` (32 bytes) | `21 10` (3 bytes, 24-bit unsigned integer in `km`) |
 
-#### Critical Caveat When Reading `0x300` and `0x500` Over OBD K-Line (`Service 0x23`)
-When you dump a 93C86 cluster over the K-line using `23 08 xx xx 10` (`0x080000–0x0807FF`), you are reading the microcontroller's **live memory-mapped RAM shadow / working buffer** of the EEPROM while the cluster OS is actively running:
-1. **Rolling Parity Difference Between `0x300` and `0x500`:**
-   - The VDO rolling-code odometer algorithm updates the 32-byte Primary (`0x300–0x31F`) and Backup (`0x500–0x51F`) blocks sequentially as fractional distance accumulates.
-   - In a live OBD read taken while the cluster is powered on, it is **completely normal** for 1 byte in the Primary block (`0x300–0x31F`) to differ by 1 bit from the Backup block (`0x500–0x51F`) — for example, in our bench `K24` dump, `0x319 = 0x2E` while `0x519 = 0x3E`.
+#### Mathematical Structure of `0x300` and `0x500` (Dual-Buffer Interleaving & Parity)
+The VDO 93C86 cluster stores the total odometer across two 32-byte blocks: Primary (`0x300–0x31F`) and Backup (`0x500–0x51F`). Each 32-byte block consists of:
+- **First 16 Bytes (`h1`):** 8 circular words stored Little-Endian (`Low, High`), generated from base ceiling word $w_0 = \text{0xFFFF} - (\text{km} \mathbin{//} 32) - 1$ via circular left 1-bit rotations (`rol16(w, 1)`).
+- **Second 16 Bytes (`h2`):** 8 differential words stored Big-Endian (`High, Low`), implementing an 8-stage Johnson/Möbius Vernier ring counter stepping in discrete **2 km quanta** (16 states per 32 km cycle).
+
+1. **Why Byte 25 Differs on Odd-Kilometer Vehicles (The Ping-Pong Interleaving):**
+   - Because a single 32-byte buffer only resolves distance in discrete 2 km increments, the VDO firmware achieves **exact 1 km resolution** by **interleaving the Primary (`0x300`) and Backup (`0x500`) buffers**:
+     $$\text{Total Odometer} = \frac{\text{Buffer}_{0x300} + \text{Buffer}_{0x500}}{2}$$
+   - **Even Kilometers ($\text{km} \pmod 2 = 0$):** Both `0x300` and `0x500` hold the exact same state (100% byte identical).
+   - **Odd Kilometers ($\text{km} \pmod 2 = 1$):** `0x300` holds the even step below, while `0x500` holds the even step above. In the binary representation, this manifests as a 1-word difference at byte offset `+0x19` (byte 25 in the block: `0x319` vs `0x519`, typically `0x2E` vs `0x3E`).
+   - **Conclusion:** A 1-word difference at byte 25 is **normal factory behavior on odd-mileage vehicles**, NOT EEPROM corruption.
+
 2. **Offline Desoldered / Clip Programming Rule:**
-   - If you are flashing a physical 93C86 chip offline with a hardware programmer (GQ-4X / CH341A), **copy the 32-byte Primary block (`0x300–0x31F`) into BOTH `0x300–0x31F` and `0x500–0x51F`** so that both blocks are 100% byte-identical at cold boot. If the two blocks disagree beyond the allowed 1-step rolling window at cold power-on, the cluster will display `999999` or illuminate the `!` parity fault indicator.
+   - If flashing a physical 93C86 chip offline with a hardware programmer (GQ-4X / CH341A), ensure both `0x300` and `0x500` are paired validly (or identical for even km). If the two blocks disagree beyond the allowed 1-step rolling window at cold power-on, the cluster will display `999999` or illuminate the `!` parity fault indicator.
+
 3. **Never Overwrite Your Cluster's Odometer or VIN with Another Car's Dump:**
    - If your cluster suffers coding corruption, **never** flash another car's complete `.bin` image onto your cluster. Doing so overwrites your VIN (`0x000`), part number (`0x01D`), DSN (`0x023`), and odometer (`0x300`/`0x500`). Instead, restore only the specific configuration fields (`0x032–0x041`, `0x192–0x19B`, etc.) over K-line using services `30 01 08`, `30 01 09`, and `3B xx`.
 

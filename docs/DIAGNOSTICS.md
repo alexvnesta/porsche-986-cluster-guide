@@ -230,33 +230,65 @@ After writing any coding or calibration parameter (`30 01 08`, `30 01 09`, or `3
 
 ---
 
-## 8. Actuator Tests (`Stellgliedtest` — `Service 0x30`)
+## 8. Actuator Tests & Diagnostic Routines (`Service 0x31`)
 
-To test individual gauges, warning lamps, the acoustic gong, or the LCD segments over K-line (`0x64`), send `30 <ActuatorID> 00`:
+> [!WARNING]
+> **Service `0x30` (`InputOutputControlByLocalIdentifier`) Is Disabled in Firmware:**
+> Although older diagnostic documentation often cites `30 10 00` – `30 1F 00` for instrument cluster actuator testing, empirical bench verification confirms that **Service `0x30` is permanently disabled** in the VDO Kombi 2000 firmware, always returning negative response `7F 30 12` (`SubFunctionNotSupported / ServiceNotSupported`).
+>
+> On all `Kombi 2000` clusters (`DSN K20–K50`), the factory PIWIS actuator suite is executed exclusively via **KWP2000 Service `0x31` (`StartRoutineByLocalIdentifier`)**.
 
-| Actuator ID | Request Hex | Component Tested | Behavior |
+### 8.1 Complete Factory Diagnostic Routines Matrix (`Service 0x31`)
+
+| Routine ID | Request Hex | Component Tested | Empirical Behavior & Notes |
 |---|---|---|---|
-| **`0x10`** | `30 10 00` | **Speedometer (`Tachometer`)** | Sweeps analog speedometer needle to test position |
-| **`0x11`** | `30 11 00` | **Tachometer (`Drehzahlmesser`)** | Sweeps RPM needle to 3,000 / 4,000 RPM |
-| **`0x12`** | `30 12 00` | **Coolant Temperature Gauge** | Sweeps coolant temperature needle + warning LED |
-| **`0x13`** | `30 13 00` | **Fuel Level Gauge (`Tankanzeige`)** | Sweeps fuel needle + low-fuel reserve LED |
-| **`0x14`** | `30 14 00` | **Oil Pressure Gauge (`Öldruckanzeige`)** | Sweeps oil pressure needle (5-gauge 996 clusters) |
-| **`0x15`** | `30 15 00` | **Voltmeter (`Voltanzeige`)** | Sweeps voltmeter needle (5-gauge 996 clusters) |
-| **`0x17`** | `30 17 00` | **Acoustic Warning Gong (`Summer/Gong`)** | Sounds the internal cluster chime/buzzer |
-| **`0x18`** | `30 18 00` | **LCD Segment Test (`Segmenttest`)** | Illuminates all segments across all 3 LCD windows |
-| **`0x19`** | `30 19 00` | **Check Engine (`MIL`) Lamp** | Toggles Check Engine tell-tale |
-| **`0x1A`** | `30 1A 00` | **Seatbelt Warning Lamp (`Gurtwarnleuchte`)** | Toggles Seatbelt tell-tale |
-| **`0x1B`** | `30 1B 00` | **Brake Pad Wear Lamp** | Toggles Brake Pad Wear tell-tale |
-| **`0x1C`** | `30 1C 00` | **Brake Fluid / Handbrake Lamp (`!`)** | Toggles Brake warning tell-tale |
-| **`0x1D`** | `30 1D 00` | **Washer Fluid Warning Lamp** | Toggles Washer Fluid tell-tale |
-| **`0x1E`** | `30 1E 00` | **PSM / ABS Traction Lamp** | Toggles PSM/ABD tell-tale |
-| **`0x1F`** | `30 1F 00` | **Rear Spoiler Warning Lamp** | Toggles Spoiler warning tell-tale |
+| **`0x05`** | `31 05` | **Analog Needle Sweeps** | Sweeps all analog stepper motor needles (Speedometer, Tachometer, Coolant Temp, Fuel, and Oil Pressure on 996) across their full dial range and returns to baseline. Returns `71 05`. |
+| **`0x07`** | `31 07` | **Warning Lamp Tell-Tales** | Illuminates all instrument cluster warning lamps and tell-tale LEDs for bulb functional verification. Returns `71 07`. |
+| **`0x03`** | `31 03 00` | **Acoustic Gong Chime** | Sounds the electronic multi-tone gong chime (seatbelt / key-in-ignition warning). Returns `71 03`. |
+| **`0x04`** | `31 04` | **Acoustic Piezo Buzzer** | Sounds the high-pitch piezo warning buzzer (headlights-on / parking brake reminder). Returns `71 04`. |
+| **`0x06 01`** | `31 06 01` | **Backlighting PWM Test** | Steps instrument cluster gauge backlighting through PWM dimming levels. Returns `71 06`. |
+| **`0x30`** | `31 30` | **Event Memory Reset** | Clears the 12-channel Event Memory warning history (`0x644–0x65B`). |
 
 ---
 
-## 9. Direct Memory Reading Over OBD K-Line (`Service 0x23`) — Complete Guide, Pros, Cons & Caveats
+## 9. Dynamic Center Display Text Injection (`Textausgabe` Routine `31 06 03`)
 
-### 9.1 How `ReadMemoryByAddress` (`0x23`) Works on Late Clusters (`93C86`)
+On late-generation clusters with dot-matrix LCD support (**DSN `K24`+**, MY2002–2005), the VDO firmware implements diagnostic routine `0x06` sub-function `0x03` (`Textausgabe`), allowing an external microcontroller (ESP32, Raspberry Pi, or diagnostic companion tool) to inject custom ASCII text directly onto the center dot-matrix display over K-line:
+
+- **Start Display Service:** `31 06 03 1C 02 <ASCII text bytes...> 00`
+- **Positive Response:** `71 06`
+- **Stop Display Service:** `32 06` (returns `72 06`)
+
+### Frame Structure
+| Byte | Value | Field Description |
+|---|---|---|
+| `0` | `0x31` | `StartRoutineByLocalIdentifier` |
+| `1` | `0x06` | Routine ID: Display Output Control |
+| `2` | `0x03` | Sub-Function: `Textausgabe` (Dynamic text output) |
+| `3` | `0x1C` | Screen / format descriptor |
+| `4` | `0x02` | Line / row selector (dot-matrix region) |
+| `5..N-1` | ASCII | Null-terminated string (e.g. `SPEED 65 MPH\0`, `OIL TEMP 92C\0`) |
+| `N` | `0x00` | Null terminator |
+
+*(Note: Early clusters such as DSN `K21` return `7F 31 10` GeneralReject because their firmware uses fixed mask-ROM strings without dynamic dot-matrix buffer injection.)*
+
+---
+
+## 10. Fuel Level Gauge Software Damping Behavior (Troubleshooting "0 Fuel" on Swaps)
+
+When a replacement cluster is installed in a car or powered up on the bench with a fuel level sender connected, the analog fuel gauge frequently reads **dead empty (`0`)** with the low-fuel warning light illuminated, even with a half-full or full tank:
+
+- **The Root Cause:** VDO Kombi 2000 firmware implements an intentionally heavy **software RC low-pass filter** (several minutes time constant) on the float sender ADC input (`Pin B21`) to prevent fuel slosh in the tank from causing analog needle movement during acceleration and cornering.
+- **Troubleshooting:**
+  - This is **normal factory behavior**, NOT a broken wire, blown fuse, or faulty tank sender.
+  - If resistance on `Pin B21` measures between ~13.6 Ω (Full) and 94.2 Ω (Empty), the wiring is functional.
+  - Allow 3–5 minutes with ignition ON, or cycle Terminal 15 power, and the stepper motor will smoothly slew to true tank capacity.
+
+---
+
+## 11. Direct Memory Reading Over OBD K-Line (`Service 0x23`) — Complete Guide, Pros, Cons & Caveats
+
+### 11.1 How `ReadMemoryByAddress` (`0x23`) Works on Late Clusters (`93C86`)
 On MY2001–2005 clusters (`DSN K20–K50`), the VDO microcontroller supports KWP2000 Service `0x23` (`ReadMemoryByAddress`) in the default diagnostic session (`81` / `10 89`) with **no `0x27` SecurityAccess seed/key required**:
 - **Request Format:** `23 <AddrHi> <AddrMid> <AddrLo> <Length>`
 - **Positive Response:** `63 <Data_0 ... Data_Length-1>`

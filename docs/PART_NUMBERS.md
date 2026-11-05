@@ -149,3 +149,19 @@ On all Porsche 986/996 clusters, the internal firmware/parameter revision is ide
 | **Late 986 (`K21`) ↔ Late 986 (`K24`/`K26`)** | `2001–2004` 986 | 100% Direct | 100% Direct (3×32-pin) | **100% hardware interchangeable.** Transfer VIN (`3B 90` or `0x000`), mileage, and verify `Parameterkodierung` (`30 01 08` / `0x032`) & `Menükonfiguration` (`30 01 09` / `0x03A`). |
 | **Late 986 2.7L ↔ Late 986 S 3.2L** | `2001–2004` 986 | 100% Direct | 100% Direct (3×32-pin) | Must match **Speedometer Stepper Curve (`21 78 00` / `0x192`)** to the physical dial face (160 mph / 250 km/h base dial vs. 180 mph / 280 km/h Boxster S dial), or needle will read ~15% (+7 mph) off! |
 | **Early (`1997–2000`) ↔ Late (`2001–2004`)** | Cross-generation | Physical pod fits | **INCOMPATIBLE** (3×26-pin vs. 3×32-pin) | Requires custom adapter harness AND note that Late clusters expect RPM, coolant temp, and PSM/ABS state over **500 kbps CAN (`A15`/`A31`)**, which pre-2000 DME 5.2.2 cars do not broadcast. |
+
+---
+
+## 6. Comparative Architecture & Empirical Differences: DSN K21 vs. K24
+
+Empirically verified across isolated bench units and live vehicle installation (swapping a `986.641.217.00` DSN `K21` with a `986.641.237.00` DSN `K24` on a 2001 Boxster S):
+
+| Capability / Feature | DSN `K21` (MY2001, `SW 22.05`) | DSN `K24` (MY2002–2004, `SW 25.04`) | Engineering & Architectural Notes |
+|---|---|---|---|
+| **Harness & Pinout** | 3×32-pin (Green/Blue/Grey) | 3×32-pin (Green/Blue/Grey) | **100% pin-for-pin interchangeable.** Direct drop-in swap. |
+| **CAN Bus Protocol** | 500 kbps High-Speed CAN | 500 kbps High-Speed CAN | Communicates identically with DME 7.2 (`0x11`), ABS 5.3 (`0x1F`), and PSM 5.7 (`0x18`). |
+| **Driver Unit Selection** | Fixed via EEPROM Coding | **Driver-Selectable in Menu** | On K24, the driver can toggle units (miles/km, °C/°F, MPG US/MPG UK/l/100km) directly via the OBC stalk. On K21, units are fixed via EEPROM `0x03C`. |
+| **Dynamic Text Injection (`31 06 03`)** | ❌ **Rejected (`7F 31 10`)** | ✅ **Supported (`71 06`)** | K24 firmware implements diagnostic routine `31 06 03` (`Textausgabe`) for dynamic center display telemetry injection. K21 uses fixed mask-ROM strings. |
+| **Diagnostic Services** | Full KWP2000 (`0x64`) | Full KWP2000 (`0x64`) | Identical service support: `1A` Identification, `18` DTCs, `21` Local Identifiers, `23` Memory Read, and `31` Actuators. |
+| **EEPROM Architecture** | Microchip 93C86 (2048 B) | Microchip 93C86 (2048 B) | 100% shared calibration structures: tank curves X/Y/Z, stepper curves, K-Zahl, tell-tale bits, and dual-buffer odometer mapping. |
+

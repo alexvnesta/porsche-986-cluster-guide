@@ -387,43 +387,80 @@ def extract_dial_calibration_old_style(data: bytes) -> dict:
     return result
 
 
+def decode_93c86_odometer_block(block: bytes) -> float:
+    """Decode a single 32-byte 93C86 odometer block into its base km contribution."""
+    if len(block) != 32 or block == b"\xFF" * 32:
+        return 0.0
+
+    w0 = block[0] | (block[1] << 8)
+    base_chunks = (0xFFFF - w0 - 1) & 0xFFFF
+    base_km = base_chunks * 32
+
+    h1_words = [block[i] | (block[i + 1] << 8) for i in range(0, 16, 2)]
+    h2_words = [(block[i] << 8) | block[i + 1] for i in range(16, 32, 2)]
+
+    diffs = [h2_words[i] - h1_words[i] for i in range(8)]
+    active = [i for i in range(8) if diffs[i] == (1 << i)]
+
+    if not active:
+        state = 0
+    elif len(active) == 8:
+        state = 8
+    elif active[0] == 0:
+        state = len(active)
+    else:
+        state = active[0] + 8
+
+    return float(base_km + state * 2)
+
+
 def extract_mileage_data(data: bytes, cluster_type: str) -> dict:
-    """Extract mileage data areas and check Primary vs Backup parity on 93C86."""
+    """Extract mileage data areas, decode odometer, and verify Primary vs Backup parity."""
     result = {}
 
     if cluster_type == "old_style":
         result['primary'] = {
             'offset': '0x00-0x0F',
             'hex': data[0x00:0x10].hex(),
-            'note': '16 bytes - encrypted mileage'
+            'note': '16 bytes - early 93C56B encrypted mileage'
         }
 
     elif cluster_type == "new_style" and len(data) >= 0x520:
         pri = data[0x300:0x320]
         bak = data[0x500:0x520]
+
+        pri_km = decode_93c86_odometer_block(pri)
+        bak_km = decode_93c86_odometer_block(bak)
+        total_km = int(round((pri_km + bak_km) / 2.0))
+        total_miles = round(total_km * 0.621371)
+
+        result['decoded_km'] = total_km
+        result['decoded_miles'] = total_miles
+        result['pri_km'] = int(pri_km)
+        result['bak_km'] = int(bak_km)
+
         result['primary'] = {
             'offset': '0x300-0x31F',
             'hex': pri.hex(),
-            'note': 'Primary mileage block (32 bytes, encrypted)'
+            'note': f'Primary mileage block ({int(pri_km):,} km)'
         }
         result['backup'] = {
             'offset': '0x500-0x51F',
             'hex': bak.hex(),
-            'note': 'Backup mileage block (32 bytes, encrypted)'
+            'note': f'Backup mileage block ({int(bak_km):,} km)'
         }
 
         if pri == bak:
             result['match'] = True
-            result['parity_note'] = "100% byte-identical"
+            result['parity_note'] = f"100% byte-identical ({total_km:,} km, even distance)"
         else:
             diffs = [(i, pri[i], bak[i]) for i in range(32) if pri[i] != bak[i]]
             result['match'] = False
-            if len(diffs) == 1 and bin(diffs[0][1] ^ diffs[0][2]).count("1") == 1:
-                idx, b_p, b_b = diffs[0]
+            if abs(pri_km - bak_km) == 2.0 or (len(diffs) == 1 and bin(diffs[0][1] ^ diffs[0][2]).count("1") == 1):
+                idx = diffs[0][0] if diffs else 0x19
                 result['parity_note'] = (
-                    f"Normal 1-bit live RAM shadow rolling difference at +0x{idx:02X} "
-                    f"(0x{0x300+idx:03X}=0x{b_p:02X} vs 0x{0x500+idx:03X}=0x{b_b:02X}). "
-                    "Copy 0x300-0x31F to 0x500-0x51F before offline chip flashing."
+                    f"Valid odd-kilometer dual-buffer half-step ({int(pri_km):,} km vs {int(bak_km):,} km -> {total_km:,} km / {total_miles:,} mi). "
+                    f"Word offset at +0x{idx:02X} is normal factory interleaving."
                 )
             else:
                 result['parity_note'] = f"WARNING: {len(diffs)} byte(s) differ between Primary and Backup!"
@@ -582,17 +619,19 @@ def print_analysis(analysis: dict):
         print(f"  * Event Memory [0x6F4]:   [{ev['raw']}] {', '.join(ev['active_events'])}")
 
     print("-" * 78)
-    print("MILEAGE DATA (encrypted):")
+    print("MILEAGE DATA:")
     mileage = analysis.get('mileage', {})
+    if 'decoded_km' in mileage:
+        print(f"  * Decoded Odometer:       {mileage['decoded_miles']:,} miles ({mileage['decoded_km']:,} km)")
     for key in ('primary', 'backup'):
         if key in mileage:
             val = mileage[key]
-            print(f"  {key.upper()} [{val['offset']}]:")
+            print(f"  * {key.capitalize()} [{val['offset']}]:       {val.get('note', '')}")
             hex_str = val['hex']
             for i in range(0, len(hex_str), 32):
-                print(f"    {hex_str[i:i+32]}")
+                print(f"      {hex_str[i:i+32]}")
     if 'parity_note' in mileage:
-        print(f"  PARITY CHECK: {mileage['parity_note']}")
+        print(f"  * Parity Status:          {mileage['parity_note']}")
     print("=" * 78)
 
 

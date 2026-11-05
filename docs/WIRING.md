@@ -145,6 +145,13 @@ Sourced from Porsche Factory Workshop Manual Wiring Diagrams (986 MY2001+ Sheet 
 | **C27–C31** | *(Not Used)* | — | Empty |
 | **C32** | **TEMPOSTAT DISTANCE** | — | ACC distance (unused on 986) |
 
+> [!IMPORTANT]
+> **OBC Stalk Retrofit Pitfall — Inverted UP/DOWN Lever Movement:**
+> When retrofitting the 4-stalk steering column switch assembly (`M659`), a common issue is finding that pushing the stalk **UP** moves the OBC display **DOWN**, and pushing **DOWN** moves it **UP**.
+> - **Hardware Reality:** The cluster microcontroller pins for **C22** and **C23** are discrete digital switch pull-ups wired directly to MCU GPIO lines.
+> - **Software Myth:** There is **no software inversion bit** in the EEPROM (`Parameterkodierung` or `Menükonfiguration`). The direction cannot be flipped via PIWIS coding or hex editing.
+> - **The Fix:** If the lever direction is inverted, physically de-pin and swap **Pin C22** (`YE/BN`) and **Pin C23** (`WH/BN`) inside the 32-pin Grey harness connector (Plug C).
+
 ---
 
 ## 3. Complete Pinout: Early Cluster (MY1997–2000, 93C56B, 3×26-Pin)
